@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expense Tracker</title>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        body {
+            font-family: 'Segoe UI';
+            background: linear-gradient(135deg, #4facfe, #00f2fe);
+            margin: 0;
+        }
+
+        .container {
+            max-width: 400px;
+            margin: 30px auto;
+            background: white;
+            padding: 20px;
+            border-radius: 20px;
+            box-shadow: 0 15px 30px rgba(0,0,0,0.2);
+        }
+
+        h2 {
+            text-align: center;
+        }
+
+        .balance {
+            text-align: center;
+            background: #eef2ff;
+            padding: 15px;
+            border-radius: 12px;
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        input, select, button {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border-radius: 10px;
+            border: none;
+            box-sizing: border-box;
+        }
+
+        input, select {
+            background: #f1f3f6;
+        }
+
+        button {
+            background: linear-gradient(to right, #36d1dc, #5b86e5);
+            color: white;
+            cursor: pointer;
+        }
+
+        .item {
+            display: flex;
+            justify-content: space-between;
+            background: #f9fafc;
+            padding: 12px;
+            margin: 10px 0;
+            border-radius: 12px;
+            box-shadow: 0 5px 10px rgba(0,0,0,0.1);
+        }
+
+        .income { color: green; }
+        .expense { color: red; }
+        .delete { cursor: pointer; }
+        small { color: gray; font-size: 12px; }
+        #warning { text-align: center; font-weight: bold; margin-top: 10px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2>💸 Expense Tracker</h2>
+
+    <h3>Set Monthly Income</h3>
+    <input type="number" id="setIncome" placeholder="Enter your income">
+    <button onclick="saveIncome()">Save Income</button>
+
+    <div class="balance">
+        Balance: ₹<span id="balance">0</span><br>
+        <small>Income: ₹<span id="totalIncome">0</span></small>
+        <p id="warning"></p>
+    </div>
+
+    <div style="display:flex; justify-content: space-between;">
+        <div>Income: ₹<span id="income">0</span></div>
+        <div>Expense: ₹<span id="expense">0</span></div>
+    </div>
+
+    <input type="text" id="desc" placeholder="Description (e.g. Food)">
+    <input type="text" id="category" placeholder="Category (Food, Travel)">
+    
+    <select id="type">
+        <option value="income">Income</option>
+        <option value="expense">Expense</option>
+    </select>
+
+    <input type="number" id="amount" placeholder="Amount">
+    <button onclick="addTransaction()">Add</button>
+
+    <input type="text" id="search" placeholder="Search..." onkeyup="updateUI()">
+
+    <select id="filter" onchange="updateUI()">
+        <option value="all">All</option>
+        <option value="income">Income</option>
+        <option value="expense">Expense</option>
+    </select>
+
+    <div id="list"></div>
+    <canvas id="myChart"></canvas>
+</div>
+
+<script>
+    // Initialize income and transactions
+    let totalIncome = Number(localStorage.getItem("income")) || 0;
+    let transactions = JSON.parse(localStorage.getItem("transactions")) || [];
+
+    document.getElementById("totalIncome").innerText = totalIncome;
+
+    function saveIncome() {
+        let income = Number(document.getElementById("setIncome").value);
+        if (!income) { alert("Enter income"); return; }
+        localStorage.setItem("income", income);
+        totalIncome = income;
+        updateUI();
+    }
+
+    function addTransaction() {
+        let desc = document.getElementById("desc").value.trim();
+        let category = document.getElementById("category").value.trim();
+        let amount = Number(document.getElementById("amount").value);
+        let type = document.getElementById("type").value;
+
+        if (!desc || !category || !amount) { alert("Fill all fields"); return; }
+        if (type === "expense") amount = -amount;
+
+        let transaction = { id: Date.now(), desc, category, amount, date: new Date().toLocaleString() };
+        transactions.push(transaction);
+        localStorage.setItem("transactions", JSON.stringify(transactions));
+        updateUI();
+    }
+
+    function deleteTransaction(id) {
+        transactions = transactions.filter(t => t.id !== id);
+        localStorage.setItem("transactions", JSON.stringify(transactions));
+        updateUI();
+    }
+
+    function updateUI() {
+        let list = document.getElementById("list");
+        list.innerHTML = "";
+
+        let filter = document.getElementById("filter").value;
+        let search = document.getElementById("search").value.toLowerCase();
+
+        let incomeTotal = totalIncome;
+        let expenseTotal = 0;
+
+        transactions.forEach(t => {
+            if (filter === "income" && t.amount < 0) return;
+            if (filter === "expense" && t.amount > 0) return;
+            if (!t.desc.toLowerCase().includes(search) && !t.category.toLowerCase().includes(search)) return;
+
+            if (t.amount < 0) expenseTotal += t.amount;
+
+            let div = document.createElement("div");
+            div.classList.add("item");
+            div.innerHTML = `
+                <span>
+                    <strong>${t.desc}</strong><br>
+                    <small>${t.category}</small><br>
+                    <small>🕒 ${t.date}</small>
+                </span>
+                <span class="${t.amount<0?'expense':'income'}">
+                    ₹${Math.abs(t.amount)}
+                </span>
+                <span class="delete" onclick="deleteTransaction(${t.id})">❌</span>
+            `;
+            list.appendChild(div);
+        });
+
+        let balance = incomeTotal + expenseTotal;
+        document.getElementById("balance").innerText = balance;
+        document.getElementById("income").innerText = incomeTotal;
+        document.getElementById("expense").innerText = Math.abs(expenseTotal);
+
+        let warning = document.getElementById("warning");
+        if (totalIncome > 0) {
+            let percent = (balance / totalIncome) * 100;
+            if (percent <= 10) { warning.innerText = "🚨 Very Low Balance!"; warning.style.color="red"; }
+            else if (percent <= 20) { warning.innerText = "⚠️ Low Balance!"; warning.style.color="orange"; }
+            else { warning.innerText = "✅ Balance is Healthy"; warning.style.color="green"; }
+        }
+
+        // Chart (Income vs Expense)
+        let ctx = document.getElementById('myChart').getContext('2d');
+        if (window.myChart) window.myChart.destroy();
+        window.myChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Income', 'Expense'],
+                datasets: [{
+                    data: [incomeTotal, Math.abs(expenseTotal)],
+                    backgroundColor: ['#36d1dc','#ff6b6b']
+                }]
+            }
+        });
+    }
+
+    updateUI();
+</script>
+</body>
+</html>
